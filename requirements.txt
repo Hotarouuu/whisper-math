@@ -1,0 +1,12 @@
+torch
+torchaudio
+pandas
+datasets
+evaluate
+transformers==4.48.0
+accelerate
+numpy
+scipy
+torchcodec
+ipywidgets
+jiwer
