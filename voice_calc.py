@@ -2,12 +2,14 @@ import queue, sys, re, numpy as np, sounddevice as sd
 from faster_whisper import WhisperModel
 from sympy import sympify, sqrt, N
 from sympy.core.sympify import SympifyError
+import librosa
 
 # ====== ASR settings ======
-SAMPLE_RATE = 16000
+SAMPLE_RATE = 48000
+TARGET_SAMPLE_RATE = 16000
 CHANNELS = 1
-DEVICE = None                  # mic index if needed (use print_devices())
-MODEL_NAME = "small"           # try "tiny" for speed, "medium" for accuracy
+DEVICE = 26                 # mic index if needed (use print_devices())
+MODEL_NAME = "medium"           # try "tiny" for speed, "medium" for accuracy
 COMPUTE_TYPE = "int8"          # good on RPi5: "int8" or "int8_float16"
 BEAM_SIZE = 5
 TEMPERATURE = 0.0
@@ -152,9 +154,15 @@ def main():
             print("No audio captured. Try again.")
             continue
 
+        audio_for_whisper = librosa.resample(
+        audio, 
+        orig_sr=SAMPLE_RATE, 
+        target_sr=TARGET_SAMPLE_RATE
+        )
+
         print("Transcribing…")
         segments, info = model.transcribe(
-            audio=audio,
+            audio=audio_for_whisper,
             language=None, task="transcribe",
             beam_size=BEAM_SIZE, temperature=TEMPERATURE,
             vad_filter=True, vad_parameters=dict(min_silence_duration_ms=250),
@@ -162,6 +170,7 @@ def main():
         )
 
         raw = "".join(seg.text for seg in segments).strip()
+        print(raw)
         clean = normalize_text_numbers_ops(raw)
         expr = postprocess_to_expression(clean)
 
