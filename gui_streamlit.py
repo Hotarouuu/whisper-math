@@ -140,7 +140,6 @@ def record_audio():
 
 def transcribe(audio_for_whisper, lang, initial_prompt):
 
-
     processor = AutoProcessor.from_pretrained("manushya-ai/whisper-medium-finetuned")
     model = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/whisper-medium-finetuned")
     forced_decoder_ids = processor.get_decoder_prompt_ids(language=lang, task="transcribe")
@@ -180,6 +179,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        st.header("Calculator")
         st.markdown("---")
         lang = st.radio(label="Choose your language", options=["English", "Arabic"])
         st.markdown("---")
@@ -215,6 +215,7 @@ def main():
 
     if st.session_state["started"]:
         audio = record_audio()
+        print(type(audio))
 
         if audio is not None:
             with st.spinner("Calculating...", show_time=True):
@@ -233,7 +234,7 @@ def main():
                     st.write(f"The result is {result}")
 
                 except Exception as e:
-                    st.error(f'This is an error: {e}', icon="🚨")
+                    st.error(f'{e}', icon="🚨")
                     st.error(f'Raw text: {raw}', icon="🚨")
         else:
             st.info("Please record your voice to start the calculation.")
