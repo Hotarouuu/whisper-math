@@ -10,3 +10,4 @@ scipy
 torchcodec
 ipywidgets
 jiwer
+audiomentations
