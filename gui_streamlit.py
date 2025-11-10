@@ -1,9 +1,11 @@
-import queue, sys, re, numpy as np, sounddevice as sd
-from faster_whisper import WhisperModel
+import streamlit as st
+import re, numpy as np
 from sympy import sympify, sqrt, N
 from sympy.core.sympify import SympifyError
 import librosa
 from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
+import soundfile as sf
+from io import BytesIO
 
 # ====== ASR settings ======
 SAMPLE_RATE = 48000
@@ -17,34 +19,6 @@ TEMPERATURE = 0.0
 # ====== INITIAL PROMPTS ======
 INITIAL_PROMPT_ar = "Arabic math: صفر واحد اثنان اثنين ثلاثة أربعة خمسة ستة سبعة ثمانية تسعة عشرة زائد ناقص ضرب قسمة جذر تربيعي يساوي نسبة مئة فاصلة نقطة أس تربيع تكعيب"
 INITIAL_PROMPT_en = "English math: zero one two three four five six seven eight nine ten plus minus times multiply divide over square root equals percent point comma power squared cubed"
-
-# ====== Audio helpers ======
-def print_devices():
-    print(sd.query_devices())
-
-def record_until_enter():
-    print("\nPress ENTER to START, then ENTER again to STOP…")
-    input()
-    print("Recording… (press ENTER to stop)")
-    q = queue.Queue()
-
-    def cb(indata, frames, time_info, status):
-        if status:
-            print(status, file=sys.stderr)
-        q.put(indata.copy())
-
-    stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS,
-                            dtype="float32", callback=cb, device=DEVICE)
-    stream.start()
-    try:
-        input()
-    finally:
-        stream.stop(); stream.close()
-
-    chunks = []
-    while not q.empty():
-        chunks.append(q.get())
-    return np.concatenate(chunks, axis=0).flatten() if chunks else np.zeros((0,), dtype=np.float32)
 
 # ====== Text normalization (EN + AR → mathy string) ======
 WORD_MAP = {
@@ -142,70 +116,129 @@ def evaluate_expression(expr: str):
     val = N(tree, 12)
     return val
 
-# ====== Main loop ======
-def main():
+# ====== Audio helpers ======
 
-    # Temporary language selection
+def record_audio():
+    audio_value = st.audio_input("Record a voice message")
 
-    lang = input(str("Select language (en or ar): ")).lower()
-    if lang in ['ar', 'arabic', 'english', 'en']:
-        print(f'Language Selected: {lang} ')
+    if audio_value is not None:
+        data, sr = sf.read(BytesIO(audio_value.getvalue()))
+        
+        if data.dtype != np.float32:
+            data = data.astype(np.float32)
+        
+        audio_for_whisper = librosa.resample(
+            data,
+            orig_sr=sr,
+            target_sr=TARGET_SAMPLE_RATE
+        )
+        return audio_for_whisper
 
-    print("Loading ASR model…")
+    return None
+
+# ====== Transcription ======
+
+def transcribe(audio_for_whisper, lang, initial_prompt):
+
 
     processor = AutoProcessor.from_pretrained("manushya-ai/whisper-medium-finetuned")
     model = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/whisper-medium-finetuned")
-    forced_decoder_ids = processor.get_decoder_prompt_ids(language=lang, task="translate")
+    forced_decoder_ids = processor.get_decoder_prompt_ids(language=lang, task="transcribe")
 
-    if lang == 'ar' or lang == 'arabic':
-        prompt_ids = processor.tokenizer.get_prompt_ids(
-        INITIAL_PROMPT_ar, 
+
+    input_features = processor(audio_for_whisper, sampling_rate=TARGET_SAMPLE_RATE, return_tensors="pt", prompt_ids=initial_prompt).input_features
+    predicted_ids = model.generate(input_features, forced_decoder_ids=forced_decoder_ids) # generate token ids
+    transcription = processor.batch_decode(predicted_ids) # decode token ids to text
+
+    raw = transcription[0]
+    clean = normalize_text_numbers_ops(raw)
+    expr = postprocess_to_expression(clean)
+
+    return raw, clean, expr
+
+# ====== Main Function ======
+
+def main():
+    st.set_page_config(
+        page_title="Voice Calculator with Whisper",
+        layout="wide"
+    )
+
+    # Session state
+
+    if "chat" not in st.session_state:
+        st.session_state["chat"] = []
+
+    if "initial_prompt" not in st.session_state:
+        st.session_state["initial_prompt"] = []
+
+    if "started" not in st.session_state:
+        st.session_state["started"] = False
+
+    if "last_lang" not in st.session_state:
+        st.session_state["last_lang"] = None
+
+    # Sidebar
+    with st.sidebar:
+        st.markdown("---")
+        lang = st.radio(label="Choose your language", options=["English", "Arabic"])
+        st.markdown("---")
+
+        
+        if lang != st.session_state["last_lang"]:
+            st.session_state["started"] = False
+            st.session_state["chat"] = []
+            st.session_state["initial_prompt"] = []
+            st.session_state["last_lang"] = lang
+
+        if st.button(label="Start"):
+            st.session_state["chat"] = []
+            st.session_state["started"] = True
+
+            if lang == "Arabic":
+                st.session_state["initial_prompt"] = INITIAL_PROMPT_ar
+            else:
+                st.session_state["initial_prompt"] = INITIAL_PROMPT_en
+
+    # Header
+    st.header("Voice Calculator Program")
+    st.markdown("---")
+
+    with st.expander("About the Voice Calculator Program", expanded=True):
+        st.write(
+            """     
+            - The UI of the Voice Calculator Program was built using Streamlit.
+            - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper fine-tuned for our needs.
+            - Calculations are generated using our own functions.
+            """
         )
+
+    if st.session_state["started"]:
+        audio = record_audio()
+
+        if audio is not None:
+            with st.spinner("Calculating...", show_time=True):
+
+                raw, clean, expr = transcribe(audio, lang, st.session_state["initial_prompt"])
+                
+                try:
+                    result = evaluate_expression(expr)
+
+                    st.text_area(
+                        "Transcription",
+                        value=f"Raw: {raw}\nClean: {clean}\nExpr: {expr}",
+                        height=150
+                    )
+
+                    st.write(f"The result is {result}")
+
+                except Exception as e:
+                    st.error(f'This is an error: {e}', icon="🚨")
+                    st.error(f'Raw text: {raw}', icon="🚨")
+        else:
+            st.info("Please record your voice to start the calculation.")
     else:
-        prompt_ids = processor.tokenizer.get_prompt_ids(
-        INITIAL_PROMPT_en, 
-        )        
-
-    while True:
-        audio = record_until_enter()
-        if audio.size == 0:
-            print("No audio captured. Try again.")
-            continue
-
-
-        audio_for_whisper = librosa.resample(
-        audio, 
-        orig_sr=SAMPLE_RATE, 
-        target_sr=TARGET_SAMPLE_RATE
-        )
-
-        print("Transcribing…")
-
-        input_features = processor(audio_for_whisper, sampling_rate=TARGET_SAMPLE_RATE, return_tensors="pt", prompt_ids=prompt_ids).input_features
-        predicted_ids = model.generate(input_features, forced_decoder_ids=forced_decoder_ids) # generate token ids
-        transcription = processor.batch_decode(predicted_ids) # decode token ids to text
-
-        raw = transcription[0]
-        clean = normalize_text_numbers_ops(raw)
-        expr = postprocess_to_expression(clean)
-
-        print("\n--- TRANSCRIPT ---")
-        print("Raw   :", raw)
-        print("Clean :", clean)
-        print("Expr  :", expr)
-
-        try:
-            result = evaluate_expression(expr)
-            print("Result:", result)
-        except Exception as e:
-            print("Error :", e)
-
-        print("------\nPress Ctrl+C to exit, or do another recording.")
+        st.warning("Click 'Start' to begin the voice calculator.")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nBye!")
-
-# note: the function is not parsing complex numbers like 125. Only basic numbers like 1000 or 100
+    main()
