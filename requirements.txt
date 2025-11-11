@@ -12,4 +12,9 @@ ipywidgets
 jiwer
 audiomentations
 tensorboardx
-uv
+uvicorn
+streamlit
+sympy
+librosa
+soundfile
+python-dotenv
