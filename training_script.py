@@ -13,6 +13,9 @@ from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, 
 import numpy as np
 import pandas as pd
 import warnings
+from dotenv import load_dotenv
+
+load_dotenv()  # Loads variables from .env file
 
 warnings.filterwarnings('ignore')
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
