@@ -179,6 +179,9 @@ def main():
 
     # Sidebar
     with st.sidebar:
+        # st.logo(image, *, size="medium", link=None, icon_image=None) -> Configure this line of code if you want a logo image on the sidebar.
+        # Read this link if you want to know more about how to configure the logo: https://docs.streamlit.io/develop/api-reference/media/st.logo
+        
         st.header("Calculator")
         st.markdown("---")
         lang = st.radio(label="Choose your language", options=["English", "Arabic"])
@@ -228,10 +231,13 @@ def main():
                     st.text_area(
                         "Transcription",
                         value=f"Raw: {raw}\nClean: {clean}\nExpr: {expr}",
-                        height=150
-                    )
+                        height=150,
+                        on_change=False
+                                      
+                        )
 
-                    st.write(f"The result is {result}")
+#                    st.write(f"The result is {result}")
+                    st.success(f'The result is {result:.2f}', icon="✅")
 
                 except Exception as e:
                     st.error(f'{e}', icon="🚨")
