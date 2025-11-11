@@ -15,12 +15,11 @@ import pandas as pd
 import warnings
 
 warnings.filterwarnings('ignore')
-
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 # ====== Paths ======
 
-data_path = r"C:\Users\lucar-work\Documents\GitHub\whisper-math\data"
+data_path = os.getenv('data_path')
 
 # ====== Importing the Model ======
 
