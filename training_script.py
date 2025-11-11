@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Union
 import os
 from pathlib import Path
 import pandas as pd
-from datasets import load_dataset, Dataset, Audio,concatenate_datasets
+from datasets import Dataset, Audio,concatenate_datasets
 from transformers import WhisperProcessor, WhisperForConditionalGeneration, pipeline
 from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer
 import evaluate
@@ -13,11 +13,9 @@ from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, 
 import numpy as np
 import pandas as pd
 import warnings
-from dotenv import load_dotenv
-
-load_dotenv()  # Loads variables from .env file
-
 warnings.filterwarnings('ignore')
+from dotenv import load_dotenv
+load_dotenv()  # Loads variables from .env file
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 # ====== Paths ======
@@ -245,8 +243,8 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="wer",
         greater_is_better=False,
-        push_to_hub=False
-        report_to="tensorboard" # To save experiments and/or check the training logs
+        push_to_hub=False,
+        report_to="tensorboard" # To save experiments and/or check the training logs. You can disable it if you want.
     )
 
     trainer = Seq2SeqTrainer(
@@ -265,5 +263,5 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nBye!")
+        print("\nTraining interrupted by user. Exiting...")
 
