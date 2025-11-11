@@ -72,7 +72,7 @@ def dataset_g(transcriptions, files, language : str):
 
     rows = []
     for label in files:
-        text = transcriptions[label]  # uma única string
+        text = transcriptions[label]  
         for file_path in files[label]:
             rows.append({'Label': label, 'audio': file_path, 'transcription': text, 'Language': language})
 
@@ -246,6 +246,7 @@ def main():
         metric_for_best_model="wer",
         greater_is_better=False,
         push_to_hub=False
+        report_to="tensorboard" # To save experiments and/or check the training logs
     )
 
     trainer = Seq2SeqTrainer(

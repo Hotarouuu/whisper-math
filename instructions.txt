@@ -1,0 +1,25 @@
+This txt file is to help you understand the structure of the project. It is separated by the name of the file to be easy to understand
+
+- requirements.txt
+
+Before everything you have to install the libs in your environment. I recommend you installing with the command "uv pip install -r requirements.txt" if you have uv in your computer.
+If you dont have, install first uv with "pip install uv" or you can install the libs with "pip install -r requirements.txt"
+
+- gui_streamlit.py:
+
+The script is easy to understand. It is using the voice_calc.py code, adapted to the streamlit library and with the fine-tuned model. Since I can't upload the model through Fiverr,
+the code is already "pushing" the model from my HuggingFace repository, containing the best version of the Whisper-Medium fine-tuned. You can choose to train your own model, since 
+the training_script is following the same parameters as the original training. The code is easy to understand and to personalize for your own needs.
+
+To run the GUI you have to write this in the terminal: streamlit run gui_streamlit.py or streamlit run your_path/gui_streamlit.py
+
+- training_script.py:
+
+Before running the training_script, create a .env file and insert the line containing the path to your data. I recommend using this example: data_path = "your_path/whisper-math/data"
+
+The script is easy to understand, but reading is required. The code itself does not process the separating the english part from the arabic, it only import using the os lib (get_audio_file_paths and dataset_g) 
+and process with the Whisper processor (generate_audio_dataset and preprocess_function). For the training I used the same functions as the Whisper Fine-tune tutorial to speed up the process and the Trainer from HuggingFace
+to facilitate implementation, since it's a wrapper for PyTorch. The code has commentaries to separate which part do what, but you can understand more about the model reading the link below.
+
+Link: https://huggingface.co/blog/fine-tune-whisper
+

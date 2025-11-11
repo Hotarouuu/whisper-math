@@ -208,7 +208,7 @@ def main():
         st.write(
             """     
             - The UI of the Voice Calculator Program was built using Streamlit.
-            - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper fine-tuned for our needs.
+            - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper Fine-tuned for our needs.
             - Calculations are generated using our own functions.
             """
         )

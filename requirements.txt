@@ -11,3 +11,5 @@ torchcodec
 ipywidgets
 jiwer
 audiomentations
+tensorboardx
+uv

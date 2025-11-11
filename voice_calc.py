@@ -155,7 +155,7 @@ def main():
 
     processor = AutoProcessor.from_pretrained("manushya-ai/whisper-medium-finetuned")
     model = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/whisper-medium-finetuned")
-    forced_decoder_ids = processor.get_decoder_prompt_ids(language=lang, task="translate")
+    forced_decoder_ids = processor.get_decoder_prompt_ids(language=lang, task="transcribe")
 
     if lang == 'ar' or lang == 'arabic':
         prompt_ids = processor.tokenizer.get_prompt_ids(
