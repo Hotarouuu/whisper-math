@@ -3,9 +3,19 @@ import re, numpy as np
 from sympy import sympify, sqrt, N
 from sympy.core.sympify import SympifyError
 import librosa
-from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
+from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq, pipeline
 import soundfile as sf
 from io import BytesIO
+
+# ====== Loading the models ======
+
+@st.cache_resource
+def load_models():
+    print("Loading models...")
+    proc = AutoProcessor.from_pretrained("manushya-ai/whisper-medium-finetuned")
+    model = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/whisper-medium-finetuned")
+    print("Models loaded.")
+    return proc, model
 
 # ====== ASR settings ======
 SAMPLE_RATE = 48000
@@ -26,6 +36,19 @@ WORD_MAP = {
     r"\bzero\b": "0", r"\bone\b": "1", r"\btwo\b": "2", r"\bthree\b": "3", r"\bfour\b": "4",
     r"\bfive\b": "5", r"\bsix\b": "6", r"\bseven\b": "7", r"\beight\b": "8", r"\bnine\b": "9",
     r"\bten\b": "10",
+    
+    # English teens
+    r"\beleven\b": "11", r"\btwelve\b": "12", r"\bthirteen\b": "13", r"\bfourteen\b": "14",
+    r"\bfifteen\b": "15", r"\bsixteen\b": "16", r"\bseventeen\b": "17", r"\beighteen\b": "18",
+    r"\bnineteen\b": "19",
+    
+    # English tens
+    r"\btwenty\b": "20", r"\bthirty\b": "30", r"\bforty\b": "40", r"\bfifty\b": "50",
+    r"\bsixty\b": "60", r"\bseventy\b": "70", r"\beighty\b": "80", r"\bninety\b": "90",
+    
+    # English larger units
+    r"\bhundred\b": "100", r"\bthousand\b": "1000", r"\bmillion\b": "1000000", r"\bbillion\b": "1000000000",
+
     # English ops/keywords
     r"\bplus\b": "+", r"\bminus\b": "-", r"\btimes\b": "*", r"\bmultiply\b": "*",
     r"\bmultiplied by\b": "*", r"\bdivide\b": "/", r"\bdivided by\b": "/", r"\bover\b": "/",
@@ -33,27 +56,55 @@ WORD_MAP = {
     r"\bpoint\b": ".", r"\bcomma\b": ".", r"\bpower\b": "^", r"\bto the power of\b": "^",
     r"\bsquared\b": "^2", r"\bcubed\b": "^3",
     r"\bof\b": "*",  # "percent of" or general multiplication
+    
     # Arabic digits
     r"\bصفر\b": "0", r"\bواحد\b": "1",
     r"\bاثنان\b": "2", r"\bاثنين\b": "2",
-    r"\bثلاثة\b": "3",
-    r"\bأربعة\b": "4", r"\bاربعة\b": "4",
-    r"\bخمسة\b": "5",
-    r"\bستة\b": "6",
-    r"\bسبعة\b": "7",
-    r"\bثمانية\b": "8",
-    r"\bتسعة\b": "9",
-    r"\bعشرة\b": "10",
+    r"\bثلاثة\b": "3", r"\bثلاث\b": "3",
+    r"\bأربعة\b": "4", r"\bاربعة\b": "4", r"\bاربع\b": "4",
+    r"\bخمسة\b": "5", r"\bخمس\b": "5",
+    r"\bستة\b": "6", r"\bست\b": "6",
+    r"\bسبعة\b": "7", r"\bسبع\b": "7",
+    r"\bثمانية\b": "8", r"\bثماني\b": "8",
+    r"\bتسعة\b": "9", r"\bتسع\b": "9",
+    r"\bعشرة\b": "10", r"\bعشر\b": "10",
+    
+    # Arabic teens
+    r"\bأحد عشر\b": "11", r"\bاحد عشر\b": "11",
+    r"\bإثنا عشر\b": "12", r"\bاثنا عشر\b": "12", r"\bإثني عشر\b": "12", r"\bاثني عشر\b": "12",
+    r"\bثلاثة عشر\b": "13", r"\bثلاثه عشر\b": "13",
+    r"\bأربعة عشر\b": "14", r"\bاربعة عشر\b": "14",
+    r"\bخمسة عشر\b": "15", r"\bخمسه عشر\b": "15",
+    r"\bستة عشر\b": "16", r"\bسته عشر\b": "16",
+    r"\bسبعة عشر\b": "17", r"\bسبعه عشر\b": "17",
+    r"\bثمانية عشر\b": "18", r"\bثمانيه عشر\b": "18",
+    r"\bتسعة عشر\b": "19", r"\bتسعه عشر\b": "19",
+
+    # Arabic tens
+    r"\bعشرون\b": "20", r"\bعشرين\b": "20",
+    r"\bثلاثون\b": "30", r"\bثلاثين\b": "30",
+    r"\bأربعون\b": "40", r"\b اربعون\b": "40", r"\bأربعين\b": "40", r"\bاربعين\b": "40",
+    r"\bخمسون\b": "50", r"\bخمسين\b": "50",
+    r"\bستون\b": "60", r"\bستين\b": "60",
+    r"\bسبعون\b": "70", r"\bسبعين\b": "70",
+    r"\bثمانون\b": "80", r"\bثمانين\b": "80",
+    r"\bتسعون\b": "90", r"\bتسعين\b": "90",
+
+    # Arabic larger units
+    r"\bمئة\b": "100", r"\bمائة\b": "100", r"\bميه\b": "100",
+    r"\bألف\b": "1000", r"\bالف\b": "1000",
+    r"\bمليون\b": "1000000",
+    r"\bمليار\b": "1000000000",
+
     # Arabic ops
     r"\bزائد\b": "+", r"\bناقص\b": "-", r"\bضرب\b": "*",
     r"\bقسمة\b": "/", r"\bعلى\b": "/", r"\bيساوي\b": "=",
-    r"\bنسبة\b": "%", r"\bمئة\b": "100",
+    r"\bنسبة\b": "%", r"\bبالمئة\b": "%", r"\bفي المئة\b": "%",
     r"\bجذر\b": "sqrt", r"\bتربيعي\b": "sqrt",
     r"\bنقطة\b": ".", r"\bفاصلة\b": ".",
     r"\bأس\b": "^", r"\bقوة\b": "^",
     r"\bمن\b": "*",  # often spoken like "50 بالمئة من 200"
 }
-
 def normalize_text_numbers_ops(text: str) -> str:
     s = text
     # Lowercase English letters only
@@ -140,14 +191,10 @@ def record_audio():
 
 def transcribe(audio_for_whisper, lang, initial_prompt):
 
-    processor = AutoProcessor.from_pretrained("manushya-ai/whisper-medium-finetuned")
-    model = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/whisper-medium-finetuned")
-    forced_decoder_ids = processor.get_decoder_prompt_ids(language=lang, task="transcribe")
-
-
-    input_features = processor(audio_for_whisper, sampling_rate=TARGET_SAMPLE_RATE, return_tensors="pt", prompt_ids=initial_prompt).input_features
-    predicted_ids = model.generate(input_features, forced_decoder_ids=forced_decoder_ids) # generate token ids
-    transcription = processor.batch_decode(predicted_ids) # decode token ids to text
+    forced_decoder_ids = st.session_state["proc"].get_decoder_prompt_ids(language=lang, task="transcribe")
+    input_features = st.session_state["proc"](audio_for_whisper, sampling_rate=TARGET_SAMPLE_RATE, return_tensors="pt", prompt_ids=initial_prompt).input_features
+    predicted_ids = st.session_state["model"].generate(input_features, forced_decoder_ids=forced_decoder_ids) # generate token ids
+    transcription = st.session_state["proc"].batch_decode(predicted_ids) # decode token ids to text
 
     raw = transcription[0]
     clean = normalize_text_numbers_ops(raw)
@@ -165,6 +212,14 @@ def main():
 
     # Session state
 
+    proc, model= load_models()
+
+    if proc not in st.session_state:
+        st.session_state["proc"] = proc
+    
+    if model not in st.session_state:
+        st.session_state["model"] = model
+
     if "chat" not in st.session_state:
         st.session_state["chat"] = []
 
@@ -176,6 +231,8 @@ def main():
 
     if "last_lang" not in st.session_state:
         st.session_state["last_lang"] = None
+
+
 
     # Sidebar
     with st.sidebar:
@@ -218,7 +275,6 @@ def main():
 
     if st.session_state["started"]:
         audio = record_audio()
-        print(type(audio))
 
         if audio is not None:
             with st.spinner("Calculating...", show_time=True):
