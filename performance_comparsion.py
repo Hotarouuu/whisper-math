@@ -1,7 +1,7 @@
 from datetime import datetime
 from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 from transformers import GenerationConfig, pipeline, AutoProcessor
-import torchaudio
+import soundfile as sf
 import librosa
 
 # Number of inferences for comparing timings
@@ -11,13 +11,13 @@ inference_file = "C:\\Users\\lucar-work\\Documents\\GitHub\\whisper-math\\data\\
 
 def transcribe(model, audio_for_whisper, lang, initial_prompt):
 
-    audio_for_whisper = torchaudio.load(audio_for_whisper)
+    audio, sr = sf.read(audio_for_whisper)
 
-    audio_for_whisper = audio_for_whisper[0].numpy()
+    audio_for_whisper = audio
 
     audio_for_whisper = librosa.resample(
     audio_for_whisper,
-    orig_sr=48000,
+    orig_sr=sr,
     target_sr=16000
     )
 

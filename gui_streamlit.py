@@ -4,42 +4,39 @@ import numpy as np
 from sympy import sympify, sqrt, N
 from sympy.core.sympify import SympifyError
 import librosa
-from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq, pipeline, BitsAndBytesConfig
+from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq, pipeline, BitsAndBytesConfig, GenerationConfig
 import soundfile as sf
 from io import BytesIO
 import time
 import torch
 import torch.nn as nn
-from pathlib import Path
-from optimum.onnxruntime import (
-    AutoQuantizationConfig,
-    ORTModelForSpeechSeq2Seq,
-    ORTQuantizer
-)
+from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
+
 
 # ====== Loading the models ======
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+#device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
 
 @st.cache_resource
 def load_models():
     print("Loading models...")
     proc = AutoProcessor.from_pretrained(
-        "manushya-ai/whisper-medium-finetuned")
-    model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        "manushya-ai/whisper-medium-finetuned", quantization_config=quantization_config, device_map="auto")
-    
-    # ensure conv layers are fp32
-    for name, module in model.named_modules():
-        if isinstance(module, (nn.Conv1d, nn.Conv2d)):
-            module.to(torch.float32)
+        "./whisper-quantized")
+    model = ORTModelForSpeechSeq2Seq.from_pretrained(
+        "./whisper-quantized",
+        providers=["DmlExecutionProvider"],  
+        encoder_file_name="encoder_model_quantized.onnx",
+        decoder_file_name="decoder_model_quantized.onnx",
+        decoder_with_past_file_name="decoder_with_past_model_quantized.onnx"
+)
 
     print("Models loaded.")
     return proc, model
 
+model_key = "whisper_model"
 
 # ====== ASR settings ======
 SAMPLE_RATE = 48000
@@ -235,9 +232,11 @@ def transcribe(audio_for_whisper, lang, initial_prompt):
         sampling_rate=TARGET_SAMPLE_RATE,
         return_tensors="pt",
         prompt_ids=initial_prompt).input_features
+    
+    gen_config = GenerationConfig(forced_decoder_ids=forced_decoder_ids)
         
-    predicted_ids = st.session_state["model"].generate(
-        input_features, forced_decoder_ids=forced_decoder_ids)  # generate token ids
+    predicted_ids = st.session_state[model_key].generate(
+        input_features, generation_config=gen_config)  # generate token ids
     
     transcription = st.session_state["proc"].batch_decode(
         predicted_ids)  # decode token ids to text
@@ -264,8 +263,8 @@ def main():
     if proc not in st.session_state:
         st.session_state["proc"] = proc
 
-    if model not in st.session_state:
-        st.session_state["model"] = model
+    if model_key not in st.session_state:
+        st.session_state[model_key] = model
 
     if "chat" not in st.session_state:
         st.session_state["chat"] = []
