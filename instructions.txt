@@ -7,9 +7,7 @@ If you don’t have it, install uv first with "pip install uv", or you can insta
 
 - gui_streamlit.py
 
-The script is easy to understand. It uses the voice_calc.py code, adapted to the Streamlit library and with the fine-tuned model. Since I can’t upload the model through Fiverr,
-the code is already “pushing” the model from my Hugging Face repository, containing the best version of the Whisper-Medium fine-tuned. You can choose to train your own model, since
-the training_script follows the same parameters as the original training. The code is easy to understand and to personalize for your own needs.
+The script is easy to understand. It uses the voice_calc.py code, adapted for the Streamlit library and integrated with the fine-tuned model. The Whisper model is already included in the folder, but if you'd like to download it directly from the Hugging Face repository, just send me a message. You can also choose to train your own model, since the training_script follows the same parameters as the original training. The code is straightforward and easy to personalize for your own needs.
 
 To run the GUI, you have to write this in the terminal: "streamlit run gui_streamlit.py" or "streamlit run your_path/gui_streamlit.py"
 
@@ -18,9 +16,10 @@ To run the GUI, you have to write this in the terminal: "streamlit run gui_strea
 Before running the training_script, create a .env file and insert the line containing the path to your data. I recommend using this example:
 data_path = "your_path/whisper-math/data"
 
-The script is easy to understand, but reading is required. The code itself does not process the separation of the English part from the Arabic; it only imports using the os library (get_audio_file_paths and dataset_g)
-and processes with the Whisper processor (generate_audio_dataset and preprocess_function). For the training, I used the same functions as in the Whisper fine-tuning tutorial to speed up the process and the Trainer from Hugging Face
-to facilitate implementation, since it’s a wrapper for PyTorch. The code has comments to separate which parts do what, but you can understand more about the model by reading the link below.
+The training script is easy to understand, but reading is required. The code itself does not process the separation of the English part from the Arabic; it only imports using the os library (get_audio_file_paths and dataset_g)
+and processes with the Whisper processor (generate_audio_dataset and preprocess_function). For training, I used the same functions from the Whisper fine-tuning tutorial to speed up the process and the Hugging Face Trainer to simplify implementation, as it is a PyTorch wrapper. The code has comments to separate which parts do what, but you can understand more about the model by reading the link below.
+
+The pre-processed data, organized into English and Arabic, is included in the folder.
 
 Link: https://huggingface.co/blog/fine-tune-whisper
 
