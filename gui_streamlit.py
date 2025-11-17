@@ -16,9 +16,9 @@ import time
 def load_models():
     print("Loading models...")
     proc = AutoProcessor.from_pretrained(
-        "openai/whisper-medium")
+        "manushya-ai/whisper-medium-finetuned")
     model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        "manushya-ai/fiver-whisper-medium-finetuned")
+        "manushya-ai/whisper-medium-finetuned")
     print("Models loaded.")
     return proc, model
 
