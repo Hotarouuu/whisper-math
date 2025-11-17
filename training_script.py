@@ -39,7 +39,7 @@ data_path = os.getenv('data_path')
 
 # ====== Importing the Model ======
 
-model_name = "openai/whisper-medium"
+model_name = "openai/whisper-base"
 
 processor = WhisperProcessor.from_pretrained(model_name, task="transcribe")
 
@@ -81,29 +81,17 @@ def get_audio_file_paths(base_path_str: str) -> dict:
 
 # ====== Data Treatment Functions ======
 
-def dataset_g(transcriptions, digits_transcription, files, language: str):
+def dataset_g(transcriptions, files, language : str):
+
     rows = []
-
-    for label, file_list in files.items():
-
-        n = len(file_list)
-
-        for i, file_path in enumerate(file_list):
-
-            if language.lower() == "arabic" and i >= n // 2:
-
-                text = digits_transcription.get(label, "")
-            else:
-
-                text = transcriptions.get(label, "")
-
-            rows.append({
-                'audio': file_path,
-                'transcription': text,
-                'Language': language
-            })
+    for label in files:
+        text = transcriptions[label]  
+        for file_path in files[label]:
+            rows.append({'Label': label, 'audio': file_path, 'transcription': text, 'Language': language})
 
     df = pd.DataFrame(rows)
+
+    df.drop('Label', axis=1, inplace=True)
 
     return df
 
@@ -206,10 +194,6 @@ def main():
     text_c_english = "two nine eleven seventy-three two hundred and three 8 plus 6 40 minus 12 7 times 7 90 divided by 10 twenty plus fifteen negative nine minus twenty plus eight five to the power of three square root of one hundred confirm repeat last slower please"
     text_c_arabic = "احسب 23 زائد 15 سبعة ناقص اثنين ثلاثة ضرب تسعة ستة وثلاثون قسمة أربعة سالب اثنا عشر زائد عشرة عشرة أس اثنين الجذر التربيعي لتسعة افتح رجوع أعد الحساب calculate twenty minus ثلاثة اجمع five و خمسة اضرب 8 في twenty-one thirty divided by ثلاثة اجمع ٧ و ١١ أربعون ناقص ١٨ 16 plus سبعة واحد فاصلة خمسة ناقص 0.25 2.2 times اثنين تسعمية وتسعة وتسعين زائد واحد 1500 minus 300 333 plus 667 قل اللون: أحمر"
 
-    text_a_digits = "احسب 5 زائد 2 10 ناقص 3 6 ضرب 4 20 قسمة 5 سالب 7 زائد 1 5 أس 2 الجذر التربيعي لـ 24 امسح تأكيد أعِد calculate 37 plus 5 اطرح 12 من 10 اضرب 3 في 20 eighty divided by 8 اجمع 12 و 13 7 زائد 19 45 minus 9 3.5 plus 2.5 1.5 ضرب 4 112 ناقص 6 1000 minus 250 999 plus 1 قل اللون: أزرق"
-    text_b_digits = "اجمع 37 و 12 45 ناقص 20 9 ضرب 6 64 قسمة 8 سالب 3 زائد 5 2 أس 3 الجذر التكعيبي لـ 27 امسح الشاشة تم كرر آخر عملية calculate 12 times 5 اقسم 36 على 6 اطرح 5 من 20 50 plus 7 اجمع 100 و 25 200 ناقص 99 14 minus 4 2.5 زائد 0.5 7.25 divided by 5 405 ناقص 10 500 plus 500 1234 minus 234 قل اللون: أخضر"
-    text_c_digits = "احسب 23 زائد 15 7 ناقص 2 3 ضرب 9 36 قسمة 4 سالب 12 زائد 10 10 أس 2 الجذر التربيعي لـ 9 افتح رجوع أعد الحساب calculate 20 minus 3 اجمع 5 و 5 اضرب 8 في 21 30 divided by 3 اجمع 7 و 11 40 ناقص 18 16 plus 7 1.5 ناقص 0.25 2.2 times 2 999 زائد 1 1500 minus 300 333 plus 667 قل اللون: أحمر"
-
     if push_hub:
         print("WARNING: YOU ARE PUSHING THE MODEL TO THE HUGGING FACE HUB. MAKE SURE YOU WANT TO DO THIS.")
 
@@ -232,15 +216,10 @@ def main():
     'C': text_c_english
     }
 
-    transcriptions_arabic_digits = {
-    'A': text_a_digits,
-    'B': text_b_digits,
-    'C': text_c_digits
-    }
 
     print('Treating data...')
-    df_arabic = dataset_g(transcriptions_arabic, transcriptions_arabic_digits, arabic_files, language='arabic')
-    df_english = dataset_g(transcriptions_english, None, english_files, language='english')
+    df_arabic = dataset_g(transcriptions_arabic, arabic_files, language='arabic')
+    df_english = dataset_g(transcriptions_english, english_files, language='english')
     df_final = generate_audio_dataset(df_arabic, df_english, augment_factor=2)
     df_final = df_final.train_test_split(test_size=0.25)
     dataset = df_final.map(preprocess_function, remove_columns=df_final["train"].column_names)
@@ -259,7 +238,7 @@ def main():
     print(f'Starting training...\n')
 
     training_args = Seq2SeqTrainingArguments(
-        output_dir="./fiver-whisper-medium-finetuned",
+        output_dir="./fiver-whisper-base-finetuned",
 
         per_device_train_batch_size=2,
         per_device_eval_batch_size=1,
