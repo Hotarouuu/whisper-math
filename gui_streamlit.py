@@ -187,7 +187,8 @@ def evaluate_expression(expr: str):
 
 
 def record_audio():
-    audio_value = st.audio_input("Record a voice message")
+    key = f"audio_rec_{st.session_state.get('audio_key', 0)}"
+    audio_value = st.audio_input("Record a voice message", key=key)
 
     if audio_value is not None:
         data, sr = sf.read(BytesIO(audio_value.getvalue()))
@@ -211,6 +212,9 @@ def transcribe(audio_for_whisper, lang, initial_prompt):
 
     forced_decoder_ids = st.session_state["proc"].get_decoder_prompt_ids(
         language=lang, task="transcribe")
+
+    #forced_decoder_ids = st.session_state["proc"].get_decoder_prompt_ids(
+    #    language=lang, task="translate")
     
     input_features = st.session_state["proc"](
         audio_for_whisper,
@@ -232,15 +236,25 @@ def transcribe(audio_for_whisper, lang, initial_prompt):
 
 # ====== Main Function ======
 
-
 def main():
     st.set_page_config(
         page_title="Voice Calculator with Whisper",
         layout="wide"
     )
 
-    # Session state
+    # Display project name title at the top
+    st.markdown("<h1 style='text-align: center; margin-bottom: 20px;'>Voice Calculator Project</h1>", unsafe_allow_html=True)
 
+    # Left-side touch buttons (Arabic, English, Start, Restart)
+    with st.sidebar:
+        st.markdown("<h2>Menu</h2>", unsafe_allow_html=True)
+        st.markdown("---")
+        lang_choice = st.radio("Language", ["Arabic", "English"], horizontal=False)
+        st.markdown("---")
+        start_pressed = st.button("Start")
+        restart_pressed = st.button("Restart")
+
+    # Session state setup
     proc, model = load_models()
 
     if proc not in st.session_state:
@@ -248,9 +262,6 @@ def main():
 
     if model not in st.session_state:
         st.session_state["model"] = model
-
-    if "chat" not in st.session_state:
-        st.session_state["chat"] = []
 
     if "initial_prompt" not in st.session_state:
         st.session_state["initial_prompt"] = []
@@ -261,38 +272,33 @@ def main():
     if "last_lang" not in st.session_state:
         st.session_state["last_lang"] = None
 
-    # Sidebar
-    with st.sidebar:
-        # st.logo(image, *, size="medium", link=None, icon_image=None) -> Configure this line of code if you want a logo image on the sidebar.
-        # Read this link if you want to know more about how to configure the
-        # logo: https://docs.streamlit.io/develop/api-reference/media/st.logo
+    if "audio" not in st.session_state:
+        st.session_state["audio"] = None
 
-        st.header("Calculator")
-        st.markdown("---")
-        lang = st.radio(
-            label="Choose your language",
-            options=[
-                "English",
-                "Arabic"])
-        st.markdown("---")
+    # Handle language change
+    if lang_choice != st.session_state.get("last_lang"):
+        st.session_state["started"] = False
+        st.session_state["initial_prompt"] = []
+        st.session_state["last_lang"] = lang_choice
 
-        if lang != st.session_state["last_lang"]:
-            st.session_state["started"] = False
-            st.session_state["chat"] = []
-            st.session_state["initial_prompt"] = []
-            st.session_state["last_lang"] = lang
 
-        if st.button(label="Start"):
-            st.session_state["chat"] = []
-            st.session_state["started"] = True
+    # Start button logic
+    if start_pressed:
+        st.session_state["started"] = True
+        st.session_state["audio"] = None
+        st.session_state["audio_key"] = (st.session_state.get("audio_key") or 0) + 1
+        if lang_choice == "Arabic":
+            st.session_state["initial_prompt"] = INITIAL_PROMPT_ar
+        else:
+            st.session_state["initial_prompt"] = INITIAL_PROMPT_en
 
-            if lang == "Arabic":
-                st.session_state["initial_prompt"] = INITIAL_PROMPT_ar
-            else:
-                st.session_state["initial_prompt"] = INITIAL_PROMPT_en
+    # Restart button logic
+    if restart_pressed:
+        st.session_state["initial_prompt"] = []
+        st.session_state["audio"] = None
+        st.session_state["started"] = True
+        st.session_state["audio_key"] = (st.session_state.get("audio_key") or 0) + 1
 
-    # Header
-    st.header("Voice Calculator Program")
     st.markdown("---")
 
     with st.expander("About the Voice Calculator Program", expanded=True):
@@ -301,49 +307,36 @@ def main():
             - The UI of the Voice Calculator Program was built using Streamlit.
             - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper Fine-Tuned for our needs.
             - Calculations are generated using our own functions.
-
             """
         )
 
     if st.session_state.get("started"):
-        audio = record_audio()
+   
+        if st.session_state["audio"] is None:
+            st.session_state["audio"] = record_audio()
+
+        audio = st.session_state["audio"]
 
         if audio is not None:
+            with st.spinner("Transcribing ...", show_time=True):
+                raw, clean, expr = transcribe(audio, lang_choice, st.session_state["initial_prompt"])
 
-            with st.container(border=True):
+            try:
+                result = evaluate_expression(expr)
 
-                with st.spinner("Transcribing ...", show_time=True):
-                    raw, clean, expr = transcribe(
-                        audio, lang, st.session_state["initial_prompt"])
+                st.markdown(
+                    f"""
+                    <h2 style="text-align:center;">
+                        The result is <span style="color:#90ee90;">{result:.2f}</span>
+                    </h2>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-                try:
-                    result = evaluate_expression(expr)
 
-                    message_h = st.chat_message("user")
-                    message = st.chat_message("ai")
-
-                    # This simulates token generation for visual context only.
-
-                    def stream_user():
-                        user_text = f"Calculate {clean} ({raw})"
-                        for token in user_text.split():
-                            yield token + " "
-                            time.sleep(0.1)  # user stream speed
-
-                    message_h.write_stream(stream_user)
-
-                    # This simulates token generation for visual context only.
-                    def stream_response():
-                        time.sleep(0.5)
-                        response_text = f"The result is {result:.2f}"
-                        for token in response_text.split():
-                            yield token + " "
-                            time.sleep(0.1)  # assistant stream speed
-
-                    message.write_stream(stream_response)
-                except Exception as e:
-                    st.error(f'{e}', icon="🚨")
-                    st.error(f'Raw text: {raw}')
+            except Exception as e:
+                st.error(f'{e}')
+                st.error(f'Raw text: {raw}')
         else:
             st.info("Please record your voice to start the calculation.")
     else:
@@ -352,3 +345,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
