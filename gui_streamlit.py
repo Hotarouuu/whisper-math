@@ -216,17 +216,26 @@ def transcribe(audio_for_whisper, lang, initial_prompt):
     #forced_decoder_ids = st.session_state["proc"].get_decoder_prompt_ids(
     #    language=lang, task="translate")
     
-    input_features = st.session_state["proc"](
+    inputs = st.session_state["proc"](
         audio_for_whisper,
         sampling_rate=TARGET_SAMPLE_RATE,
         return_tensors="pt",
-        prompt_ids=initial_prompt).input_features
+        prompt_ids=initial_prompt)
     
+    input_model = inputs.input_features
+
     predicted_ids = st.session_state["model"].generate(
-        input_features, forced_decoder_ids=forced_decoder_ids)  # generate token ids
+        input_model,
+        forced_decoder_ids=forced_decoder_ids,
+        num_beams=3,
+        #no_repeat_ngram_size=2,
+        early_stopping=True
+    )
+
     
     transcription = st.session_state["proc"].batch_decode(
         predicted_ids)  # decode token ids to text
+    
 
     raw = transcription[0]
     clean = normalize_text_numbers_ops(raw)
@@ -238,12 +247,12 @@ def transcribe(audio_for_whisper, lang, initial_prompt):
 
 def main():
     st.set_page_config(
-        page_title="Voice Calculator with Whisper",
+        page_title="BISCA",
         layout="wide"
     )
 
     # Display project name title at the top
-    st.markdown("<h1 style='text-align: center; margin-bottom: 20px;'>Voice Calculator Project</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-bottom: 25px;'>BISCA</h1>", unsafe_allow_html=True)
 
     # Left-side touch buttons (Arabic, English, Start, Restart)
     with st.sidebar:
@@ -285,6 +294,8 @@ def main():
     # Start button logic
     if start_pressed:
         st.session_state["started"] = True
+        st.session_state["audio"] = None
+
         if lang_choice == "Arabic":
             st.session_state["initial_prompt"] = INITIAL_PROMPT_ar
         else:
@@ -299,10 +310,11 @@ def main():
 
     st.markdown("---")
 
-    with st.expander("About the Voice Calculator Program", expanded=True):
+
+    with st.expander("About the BISCA", expanded=True):
         st.write(
             """
-            - The UI of the Voice Calculator Program was built using Streamlit.
+            - The UI of the BISCA was built using Streamlit.
             - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper Fine-Tuned for our needs.
             - Calculations are generated using our own functions.
             """
@@ -327,12 +339,13 @@ def main():
 
                 st.markdown(
                     f"""
-                    <h2 style="text-align:center;">
+                    <h2 style="text-align:center; font-size:50px;">
                         The result is <span style="color:#90ee90;">{result:.2f}</span>
                     </h2>
                     """,
                     unsafe_allow_html=True
                 )
+
 
 
             except Exception as e:
