@@ -1,13 +1,13 @@
 from datetime import datetime
 from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
-from transformers import GenerationConfig, pipeline, AutoProcessor
+from transformers import GenerationConfig, pipeline, AutoProcessor, AutoModelForSpeechSeq2Seq
 import soundfile as sf
 import librosa
 
 # Number of inferences for comparing timings
 num_inferences = 4
-save_dir = "C:\\Users\\lucar-work\\Documents\\GitHub\\whisper-math\\whisper-quantized"
-inference_file = "C:\\Users\\lucar-work\\Documents\\GitHub\\whisper-math\\data\\processed data\\arabic\\B\\arabic 1.wav"
+save_dir = "/workspace/whisper-math/new_whisper_quantized"
+inference_file = "/workspace/whisper-math/data/processed data/arabic/B/arabic 1.wav"
 
 def transcribe(model, audio_for_whisper, lang, initial_prompt):
 
@@ -45,17 +45,18 @@ def transcribe(model, audio_for_whisper, lang, initial_prompt):
 # Create pipeline based on quantized ONNX model
 model = ORTModelForSpeechSeq2Seq.from_pretrained(
     save_dir,
-    providers=["DmlExecutionProvider"],  
+    providers=["CPUExecutionProvider"],  
     encoder_file_name="encoder_model_quantized.onnx",
     decoder_file_name="decoder_model_quantized.onnx",
     decoder_with_past_file_name="decoder_with_past_model_quantized.onnx"
 )
 
 model.to("cpu")
-proc = AutoProcessor.from_pretrained(save_dir)
+proc = AutoProcessor.from_pretrained("openai/whisper-medium")
 # Create pipeline with original model as baseline
-cls_pipeline_original = pipeline("automatic-speech-recognition", model="manushya-ai/whisper-medium-finetuned", device="cpu")
+# Load model directly
 
+model_not_quantized = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/fiver-whisper-medium-finetuned")
 # Measure inference of quantized model
 start_quantized = datetime.now()
 for i in range(num_inferences):
@@ -65,7 +66,7 @@ end_quantized = datetime.now()
 # Measure inference of original model
 start_original = datetime.now()
 for i in range(num_inferences):
-    not_quantized = transcribe(cls_pipeline_original.model, inference_file, lang="ar", initial_prompt=None)
+    not_quantized = transcribe(model_not_quantized, inference_file, lang="ar", initial_prompt=None)
 end_original = datetime.now()
 
 original_inference_time = (end_original - start_original).total_seconds() / num_inferences

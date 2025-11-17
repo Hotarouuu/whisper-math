@@ -13,10 +13,25 @@ from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, 
 import numpy as np
 import pandas as pd
 import warnings
+import transformers
+import argparse
 warnings.filterwarnings('ignore')
 from dotenv import load_dotenv
 load_dotenv()  # Loads variables from .env file
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+# ======= Argparse ======
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--PUSH_TO_HUB', action='store_true', help='Push model to hub')
+args = parser.parse_args()
+push_hub = args.PUSH_TO_HUB
+
+try:
+    import huggingface_hub
+    huggingface_hub.login(token=os.getenv('HUGGINGFACE_HUB_TOKEN'))
+except:
+    print("It's necessary to set the HUGGINGFACE_HUB_TOKEN environment variable to push the model to the hub.")
 
 # ====== Paths ======
 
@@ -195,6 +210,10 @@ def main():
     text_b_digits = "اجمع 37 و 12 45 ناقص 20 9 ضرب 6 64 قسمة 8 سالب 3 زائد 5 2 أس 3 الجذر التكعيبي لـ 27 امسح الشاشة تم كرر آخر عملية calculate 12 times 5 اقسم 36 على 6 اطرح 5 من 20 50 plus 7 اجمع 100 و 25 200 ناقص 99 14 minus 4 2.5 زائد 0.5 7.25 divided by 5 405 ناقص 10 500 plus 500 1234 minus 234 قل اللون: أخضر"
     text_c_digits = "احسب 23 زائد 15 7 ناقص 2 3 ضرب 9 36 قسمة 4 سالب 12 زائد 10 10 أس 2 الجذر التربيعي لـ 9 افتح رجوع أعد الحساب calculate 20 minus 3 اجمع 5 و 5 اضرب 8 في 21 30 divided by 3 اجمع 7 و 11 40 ناقص 18 16 plus 7 1.5 ناقص 0.25 2.2 times 2 999 زائد 1 1500 minus 300 333 plus 667 قل اللون: أحمر"
 
+    if push_hub:
+        print("WARNING: YOU ARE PUSHING THE MODEL TO THE HUGGING FACE HUB. MAKE SURE YOU WANT TO DO THIS.")
+
+        
     print(f'Importing data...')
 
     all_files = get_audio_file_paths(data_path)
@@ -240,7 +259,7 @@ def main():
     print(f'Starting training...\n')
 
     training_args = Seq2SeqTrainingArguments(
-        output_dir="./whisper-medium-finetuned",
+        output_dir="./fiver-whisper-medium-finetuned",
 
         per_device_train_batch_size=2,
         per_device_eval_batch_size=1,
@@ -251,9 +270,9 @@ def main():
 
         gradient_checkpointing=False,
         bf16=True,
-        fp16=False,
+        #fp16=True
 
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="best",
         logging_strategy="steps",
         logging_steps=10,
@@ -265,8 +284,7 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="wer",
         greater_is_better=False,
-        push_to_hub=False,
-        report_to="tensorboard" # To save experiments and/or check the training logs. You can disable it if you want.
+        save_total_limit=2
     )
 
     trainer = Seq2SeqTrainer(
@@ -276,10 +294,16 @@ def main():
         eval_dataset=dataset["test"],
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        tokenizer=processor.feature_extractor,
+        tokenizer=processor.feature_extractor
+        #callbacks=[transformers.EarlyStoppingCallback(2, 0.0)]
     )
 
     trainer.train()
+
+    if push_hub:
+        print(f'Forcing upload the model to the hub')
+        trainer.push_to_hub()
+
 
 if __name__ == "__main__":
     try:

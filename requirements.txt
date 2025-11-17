@@ -6,8 +6,8 @@ ipywidgets
 jiwer
 librosa
 numpy
-onnxruntime-directml
-optimum[exporters,onnxruntime]
+onnxruntime
+optimum
 pandas
 python-dotenv
 scipy

@@ -6,8 +6,8 @@ from optimum.onnxruntime import (
 )
 
 # Configure base model and save directory for compressed model
-model_id = "manushya-ai/whisper-medium-finetuned"
-save_dir = "C:\\Users\\lucar-work\\Documents\\GitHub\\whisper-math\\whisper-quantized"
+model_id = "manushya-ai/fiver-whisper-medium-finetuned"
+save_dir = "/workspace/whisper-math/new_whisper_quantized"
 
 # Export model in ONNX
 model = ORTModelForSpeechSeq2Seq.from_pretrained(model_id, export=True)
@@ -18,7 +18,11 @@ onnx_models = list(Path(model_dir).glob("*.onnx"))
 print(onnx_models)
 quantizers = [ORTQuantizer.from_pretrained(model_dir, file_name=onnx_model) for onnx_model in onnx_models]
 
-qconfig = AutoQuantizationConfig.avx512_vnni(is_static=False, per_channel=False)
+# qconfig = AutoQuantizationConfig.avx512_vnni(is_static=False, per_channel=False) -> for systems with AVX-512 VNNI support
+qconfig = AutoQuantizationConfig.avx2(is_static=False, per_channel=False) # -> for systems with AVX2 support (change with you need)
+
+# There is no "general" quantization config compatible with all systems (specially CPU), please check the optimum documentation for other options
+
 
 for quantizer in quantizers:
     # Apply dynamic quantization and save the resulting model
