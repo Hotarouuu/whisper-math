@@ -285,8 +285,6 @@ def main():
     # Start button logic
     if start_pressed:
         st.session_state["started"] = True
-        st.session_state["audio"] = None
-        st.session_state["audio_key"] = (st.session_state.get("audio_key") or 0) + 1
         if lang_choice == "Arabic":
             st.session_state["initial_prompt"] = INITIAL_PROMPT_ar
         else:
@@ -323,6 +321,9 @@ def main():
 
             try:
                 result = evaluate_expression(expr)
+                print(f'Raw transcription: {raw}')
+                print(f'Normalized text: {clean}')
+                print(f'Expression: {expr}')
 
                 st.markdown(
                     f"""
