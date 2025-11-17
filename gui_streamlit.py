@@ -1,42 +1,21 @@
 import streamlit as st
-import re
-import numpy as np
+import re, numpy as np
 from sympy import sympify, sqrt, N
 from sympy.core.sympify import SympifyError
 import librosa
 from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq, pipeline, BitsAndBytesConfig, GenerationConfig
 import soundfile as sf
 from io import BytesIO
-import time
-import torch
-import torch.nn as nn
-from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
-
 
 # ====== Loading the models ======
-
-#device = "cuda" if torch.cuda.is_available() else "cpu"
-device = "cpu"
-
-quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 
 @st.cache_resource
 def load_models():
     print("Loading models...")
-    proc = AutoProcessor.from_pretrained(
-        "./whisper-quantized")
-    model = ORTModelForSpeechSeq2Seq.from_pretrained(
-        "./whisper-quantized",
-        providers=["DmlExecutionProvider"],  
-        encoder_file_name="encoder_model_quantized.onnx",
-        decoder_file_name="decoder_model_quantized.onnx",
-        decoder_with_past_file_name="decoder_with_past_model_quantized.onnx"
-)
-
+    proc = AutoProcessor.from_pretrained("manushya-ai/whisper-medium-finetuned")
+    model = AutoModelForSpeechSeq2Seq.from_pretrained("manushya-ai/whisper-medium-finetuned")
     print("Models loaded.")
     return proc, model
-
-model_key = "whisper_model"
 
 # ====== ASR settings ======
 SAMPLE_RATE = 48000
@@ -57,16 +36,16 @@ WORD_MAP = {
     r"\bzero\b": "0", r"\bone\b": "1", r"\btwo\b": "2", r"\bthree\b": "3", r"\bfour\b": "4",
     r"\bfive\b": "5", r"\bsix\b": "6", r"\bseven\b": "7", r"\beight\b": "8", r"\bnine\b": "9",
     r"\bten\b": "10",
-
+    
     # English teens
     r"\beleven\b": "11", r"\btwelve\b": "12", r"\bthirteen\b": "13", r"\bfourteen\b": "14",
     r"\bfifteen\b": "15", r"\bsixteen\b": "16", r"\bseventeen\b": "17", r"\beighteen\b": "18",
     r"\bnineteen\b": "19",
-
+    
     # English tens
     r"\btwenty\b": "20", r"\bthirty\b": "30", r"\bforty\b": "40", r"\bfifty\b": "50",
     r"\bsixty\b": "60", r"\bseventy\b": "70", r"\beighty\b": "80", r"\bninety\b": "90",
-
+    
     # English larger units
     r"\bhundred\b": "100", r"\bthousand\b": "1000", r"\bmillion\b": "1000000", r"\bbillion\b": "1000000000",
 
@@ -77,7 +56,7 @@ WORD_MAP = {
     r"\bpoint\b": ".", r"\bcomma\b": ".", r"\bpower\b": "^", r"\bto the power of\b": "^",
     r"\bsquared\b": "^2", r"\bcubed\b": "^3",
     r"\bof\b": "*",  # "percent of" or general multiplication
-
+    
     # Arabic digits
     r"\bصفر\b": "0", r"\bواحد\b": "1",
     r"\bاثنان\b": "2", r"\bاثنين\b": "2",
@@ -89,7 +68,7 @@ WORD_MAP = {
     r"\bثمانية\b": "8", r"\bثماني\b": "8",
     r"\bتسعة\b": "9", r"\bتسع\b": "9",
     r"\bعشرة\b": "10", r"\bعشر\b": "10",
-
+    
     # Arabic teens
     r"\bأحد عشر\b": "11", r"\bاحد عشر\b": "11",
     r"\bإثنا عشر\b": "12", r"\bاثنا عشر\b": "12", r"\bإثني عشر\b": "12", r"\bاثني عشر\b": "12",
@@ -126,24 +105,18 @@ WORD_MAP = {
     r"\bأس\b": "^", r"\bقوة\b": "^",
     r"\bمن\b": "*",  # often spoken like "50 بالمئة من 200"
 }
-
-
 def normalize_text_numbers_ops(text: str) -> str:
     s = text
     # Lowercase English letters only
     s = re.sub(r"[A-Z]", lambda m: m.group(0).lower(), s)
     # Strip Arabic definite article "ال" before certain math words
-    s = re.sub(
-        r"\bال(?=(جذر|نسبة|فاصلة|نقطة|قسم|قسمة|ضرب|جمع|طرح|تربيعي))",
-        "",
-        s)
+    s = re.sub(r"\bال(?=(جذر|نسبة|فاصلة|نقطة|قسم|قسمة|ضرب|جمع|طرح|تربيعي))", "", s)
     # Apply bilingual word map
     for pat, repl in WORD_MAP.items():
         s = re.sub(pat, repl, s, flags=re.IGNORECASE)
     # Normalize spacing
     s = re.sub(r"\s+", " ", s).strip()
     return s
-
 
 def postprocess_to_expression(s: str) -> str:
     # Convert ^ to ** for Python/SymPy power
@@ -163,16 +136,14 @@ def postprocess_to_expression(s: str) -> str:
         # choose RHS if non-empty else LHS
         s = parts[-1].strip() if parts[-1].strip() else parts[0].strip()
 
-    # Remove any characters not allowed (digits, ops, dot, parens, letters in
-    # sqrt)
+    # Remove any characters not allowed (digits, ops, dot, parens, letters in sqrt)
     s = re.sub(r"[^0-9+\-*/().sqrtt ]", "", s)
 
     # Condense 's q r t' to 'sqrt'
     s = re.sub(r"s\s*q\s*r\s*t", "sqrt", s, flags=re.I)
 
     # Balance parentheses lightly: add missing closing
-    opens = s.count("(")
-    closes = s.count(")")
+    opens = s.count("("); closes = s.count(")")
     if opens > closes:
         s += ")" * (opens - closes)
 
@@ -180,10 +151,8 @@ def postprocess_to_expression(s: str) -> str:
     s = re.sub(r"\s*([+\-*/()])\s*", r"\1", s)
     return s.strip()
 
-
 # ====== Safe evaluation with SymPy ======
 ALLOWED_FUNCS = {"sqrt": sqrt}
-
 
 def evaluate_expression(expr: str):
     # Reject if unknown letters appear (only allow 'sqrt')
@@ -200,16 +169,15 @@ def evaluate_expression(expr: str):
 
 # ====== Audio helpers ======
 
-
 def record_audio():
     audio_value = st.audio_input("Record a voice message")
 
     if audio_value is not None:
         data, sr = sf.read(BytesIO(audio_value.getvalue()))
-
+        
         if data.dtype != np.float32:
             data = data.astype(np.float32)
-
+        
         audio_for_whisper = librosa.resample(
             data,
             orig_sr=sr,
@@ -221,25 +189,12 @@ def record_audio():
 
 # ====== Transcription ======
 
-
 def transcribe(audio_for_whisper, lang, initial_prompt):
 
-    forced_decoder_ids = st.session_state["proc"].get_decoder_prompt_ids(
-        language=lang, task="transcribe")
-    
-    input_features = st.session_state["proc"](
-        audio_for_whisper,
-        sampling_rate=TARGET_SAMPLE_RATE,
-        return_tensors="pt",
-        prompt_ids=initial_prompt).input_features
-    
-    gen_config = GenerationConfig(forced_decoder_ids=forced_decoder_ids)
-        
-    predicted_ids = st.session_state[model_key].generate(
-        input_features, generation_config=gen_config)  # generate token ids
-    
-    transcription = st.session_state["proc"].batch_decode(
-        predicted_ids)  # decode token ids to text
+    forced_decoder_ids = st.session_state["proc"].get_decoder_prompt_ids(language=lang, task="transcribe")
+    input_features = st.session_state["proc"](audio_for_whisper, sampling_rate=TARGET_SAMPLE_RATE, return_tensors="pt", prompt_ids=initial_prompt).input_features
+    predicted_ids = st.session_state["model"].generate(input_features, forced_decoder_ids=forced_decoder_ids) # generate token ids
+    transcription = st.session_state["proc"].batch_decode(predicted_ids) # decode token ids to text
 
     raw = transcription[0]
     clean = normalize_text_numbers_ops(raw)
@@ -249,7 +204,6 @@ def transcribe(audio_for_whisper, lang, initial_prompt):
 
 # ====== Main Function ======
 
-
 def main():
     st.set_page_config(
         page_title="Voice Calculator with Whisper",
@@ -258,13 +212,13 @@ def main():
 
     # Session state
 
-    proc, model = load_models()
+    proc, model= load_models()
 
     if proc not in st.session_state:
         st.session_state["proc"] = proc
-
-    if model_key not in st.session_state:
-        st.session_state[model_key] = model
+    
+    if model not in st.session_state:
+        st.session_state["model"] = model
 
     if "chat" not in st.session_state:
         st.session_state["chat"] = []
@@ -278,21 +232,19 @@ def main():
     if "last_lang" not in st.session_state:
         st.session_state["last_lang"] = None
 
+
+
     # Sidebar
     with st.sidebar:
         # st.logo(image, *, size="medium", link=None, icon_image=None) -> Configure this line of code if you want a logo image on the sidebar.
-        # Read this link if you want to know more about how to configure the
-        # logo: https://docs.streamlit.io/develop/api-reference/media/st.logo
-
+        # Read this link if you want to know more about how to configure the logo: https://docs.streamlit.io/develop/api-reference/media/st.logo
+        
         st.header("Calculator")
         st.markdown("---")
-        lang = st.radio(
-            label="Choose your language",
-            options=[
-                "English",
-                "Arabic"])
+        lang = st.radio(label="Choose your language", options=["English", "Arabic"])
         st.markdown("---")
 
+        
         if lang != st.session_state["last_lang"]:
             st.session_state["started"] = False
             st.session_state["chat"] = []
@@ -314,58 +266,42 @@ def main():
 
     with st.expander("About the Voice Calculator Program", expanded=True):
         st.write(
-            """
+            """     
             - The UI of the Voice Calculator Program was built using Streamlit.
-            - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper Fine-Tuned for our needs.
+            - ASR (Automatic Speech Recognition) was implemented using OpenAI's Whisper Fine-tuned for our needs.
             - Calculations are generated using our own functions.
-
             """
         )
 
-    if st.session_state.get("started"):
+    if st.session_state["started"]:
         audio = record_audio()
 
         if audio is not None:
+            with st.spinner("Calculating...", show_time=True):
 
-            with st.container(border=True):
-
-                with st.spinner("Transcribing ...", show_time=True):
-                    raw, clean, expr = transcribe(
-                        audio, lang, st.session_state["initial_prompt"])
-
+                raw, clean, expr = transcribe(audio, lang, st.session_state["initial_prompt"])
+                
                 try:
                     result = evaluate_expression(expr)
 
-                    message_h = st.chat_message("user")
-                    message = st.chat_message("ai")
+                    st.text_area(
+                        "Transcription",
+                        value=f"Raw: {raw}\nClean: {clean}\nExpr: {expr}",
+                        height=150,
+                        on_change=False
+                                      
+                        )
 
-                    # This simulates token generation for visual context only.
+#                    st.write(f"The result is {result}")
+                    st.success(f'The result is {result:.2f}', icon="✅")
 
-                    def stream_user():
-                        user_text = f"Calculate {clean} ({raw})"
-                        for token in user_text.split():
-                            yield token + " "
-                            time.sleep(0.1)  # user stream speed
-
-                    message_h.write_stream(stream_user)
-
-                    # This simulates token generation for visual context only.
-                    def stream_response():
-                        time.sleep(0.5)
-                        response_text = f"The result is {result:.2f}"
-                        for token in response_text.split():
-                            yield token + " "
-                            time.sleep(0.1)  # assistant stream speed
-
-                    message.write_stream(stream_response)
                 except Exception as e:
                     st.error(f'{e}', icon="🚨")
-                    st.error(f'Raw text: {raw}')
+                    st.error(f'Raw text: {raw}', icon="🚨")
         else:
             st.info("Please record your voice to start the calculation.")
     else:
         st.warning("Click 'Start' to begin the voice calculator.")
-
 
 if __name__ == "__main__":
     main()
